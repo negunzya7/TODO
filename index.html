@@ -4,21 +4,299 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ToDo</title>
+    <title>Todo List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        purple: '#6C5CFF'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 
-<body>
-    <div class="w-[750px] h-[710px] bg-amber-50">
-        <div class="w-[750px] h-[135px] bg-ambee-100">
-            <div class="font">TODO LIST</div>
-            <div>
-                <div class=""></div>
-                <div class="w-[] h-[] bg-amber-300">ALL</div>
-                <div class=""></div>
+<body class="bg-[#f7f7f8] text-[#222126] dark:bg-[#202022] dark:text-white min-h-screen transition-colors">
+
+    <main class="w-[min(520px,calc(100%-32px))] mx-auto pt-16 pb-24">
+
+        <h1 class="text-center text-xs font-bold tracking-[2px] mb-7">
+            TODO LIST
+        </h1>
+
+        <!-- Toolbar -->
+        <div class="flex gap-2 mb-4">
+
+            <div class="relative flex-1">
+                <input id="search" type="text" placeholder="Search note..."
+                    class="w-full h-[34px] px-3 pr-8 text-[11px] rounded border border-[#d8d3ff] bg-white dark:bg-[#252527] dark:text-white outline-none focus:border-purple">
+                <span class="absolute right-3 top-2 text-purple">⌕</span>
             </div>
+
+            <select id="filter"
+                class="h-[34px] px-3 rounded bg-purple text-white text-[10px] font-bold outline-none cursor-pointer">
+                <option value="all">ALL</option>
+                <option value="active">ACTIVE</option>
+                <option value="completed">COMPLETED</option>
+            </select>
+
+            <button id="theme" class="w-[34px] h-[34px] rounded bg-purple text-white hover:opacity-80">☾</button>
+
         </div>
-        <div class="w-[750px] h-[575px] bg-amber-200"></div>
+
+        <!-- Todo list -->
+        <div id="list" class="min-h-[130px]"></div>
+
+        <div class="flex justify-between items-center mt-4 text-[10px] text-gray-400">
+            <span id="count"></span>
+            <button id="clear" class="text-purple hover:underline">
+                Clear completed
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Add button -->
+    <button id="add"
+        class="fixed bottom-8 left-1/2 -translate-x-1/2 w-11 h-11 rounded-full bg-purple text-white text-2xl shadow-lg shadow-purple/30 hover:scale-110 transition">+</button>
+
+    <!-- Modal -->
+    <div id="overlay" class="hidden fixed inset-0 z-50 bg-black/60 items-start justify-center pt-24 px-4">
+        <div
+            class="w-full max-w-[360px] rounded bg-white dark:bg-[#252527] border border-gray-200 dark:border-gray-700 p-5 shadow-2xl">
+
+            <h2 id="modalTitle" class="text-center text-xs font-bold mb-5">
+                NEW NOTE
+            </h2>
+
+            <input id="noteInput" type="text" maxlength="180" placeholder="Input your note..."
+                class="w-full h-9 px-3 text-xs border border-[#d8d3ff] bg-white dark:bg-[#202022] dark:text-white outline-none focus:border-purple">
+
+            <div class="flex justify-between mt-8">
+                <button id="cancel"
+                    class="px-4 py-2 text-[10px] text-purple border border-purple hover:bg-purple/10">CANCEL</button>
+
+                <button id="apply" class="px-4 py-2 text-[10px] text-white bg-purple hover:opacity-80">APPLY</button>
+            </div>
+
+        </div>
     </div>
+
+    <script>
+        const $ = id => document.getElementById(id);
+
+        let tasks = JSON.parse(localStorage.getItem('todo-tasks') || 'null') || [
+            { id: 1, text: 'NOTE #1', done: false },
+            { id: 2, text: 'NOTE #2', done: true },
+            { id: 3, text: 'NOTE #3', done: false }
+        ];
+
+        let filter = 'all';
+        let editingId = null;
+
+        function save() {
+            localStorage.setItem('todo-tasks', JSON.stringify(tasks));
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                '"': '&quot;', "'": '&#39;'
+            })[c]);
+        }
+
+        function render() {
+            const query = $('search').value.toLowerCase().trim();
+
+            const visible = tasks.filter(t => {
+                const matchesFilter =
+                    filter === 'all' ||
+                    (filter === 'active' && !t.done) ||
+                    (filter === 'completed' && t.done);
+
+                return matchesFilter && t.text.toLowerCase().includes(query);
+            });
+
+            $('list').innerHTML = visible.length
+                ? visible.map(t => `
+      <div data-id="${t.id}"
+        class="group flex items-center gap-3 min-h-[38px] px-2 border-b border-gray-200 dark:border-[#3b3a40]">
+
+        <input
+          type="checkbox"
+          ${t.done ? 'checked' : ''}
+          class="check appearance-none w-[13px] h-[13px] shrink-0 border border-[#bcb6ff] rounded-sm checked:bg-purple checked:border-purple cursor-pointer relative"
+        >
+
+        <span class="task-title flex-1 text-[11px] break-words cursor-pointer ${t.done
+                        ? 'line-through text-gray-400'
+                        : ''
+                    }">${escapeHTML(t.text)}</span>
+
+        <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
+          <button class="edit text-gray-400 hover:text-purple">✎</button>
+          <button class="delete text-gray-400 hover:text-red-500">×</button>
+        </div>
+
+      </div>
+    `).join('')
+                : `
+      <div class="h-40 flex flex-col items-center justify-center gap-3 text-gray-400">
+        <div class="w-16 h-16 rounded-full bg-purple/10 flex items-center justify-center text-3xl text-purple">✦</div>
+        <span class="text-[10px]">Nothing here yet...</span>
+      </div>
+    `;
+
+            $('count').textContent =
+                `${tasks.filter(t => !t.done).length} active · ${tasks.length} total`;
+
+            $('clear').classList.toggle(
+                'invisible',
+                !tasks.some(t => t.done)
+            );
+        }
+
+        function openModal(task = null) {
+            editingId = task ? task.id : null;
+            $('modalTitle').textContent = task ? 'EDIT NOTE' : 'NEW NOTE';
+            $('noteInput').value = task ? task.text : '';
+
+            $('overlay').classList.remove('hidden');
+            $('overlay').classList.add('flex');
+
+            setTimeout(() => $('noteInput').focus(), 50);
+        }
+
+        function closeModal() {
+            $('overlay').classList.add('hidden');
+            $('overlay').classList.remove('flex');
+            editingId = null;
+            $('noteInput').value = '';
+        }
+
+        function applyNote() {
+            const text = $('noteInput').value.trim();
+
+            if (!text) {
+                $('noteInput').focus();
+                return;
+            }
+
+            if (editingId !== null) {
+                const task = tasks.find(t => t.id === editingId);
+                if (task) task.text = text;
+            } else {
+                tasks.unshift({
+                    id: Date.now(),
+                    text,
+                    done: false
+                });
+            }
+
+            save();
+            render();
+            closeModal();
+        }
+
+        // Add
+        $('add').onclick = () => openModal();
+
+        // Apply
+        $('apply').onclick = applyNote;
+
+        $('noteInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyNote();
+            }
+        });
+
+        // Cancel
+        $('cancel').onclick = closeModal;
+
+        $('overlay').onclick = e => {
+            if (e.target === $('overlay')) closeModal();
+        };
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Filter
+        $('filter').onchange = e => {
+            filter = e.target.value;
+            render();
+        };
+
+        // Search
+        $('search').oninput = render;
+
+        // Theme
+        function setTheme(dark) {
+            document.documentElement.classList.toggle('dark', dark);
+            $('theme').textContent = dark ? '☀' : '☾';
+            localStorage.setItem('todo-dark', dark);
+        }
+
+        $('theme').onclick = () => {
+            setTheme(!document.documentElement.classList.contains('dark'));
+        };
+
+        if (localStorage.getItem('todo-dark') === 'true') {
+            setTheme(true);
+        }
+
+        // Checkbox and delete/edit
+        $('list').addEventListener('change', e => {
+            if (!e.target.classList.contains('check')) return;
+
+            const id = Number(e.target.closest('[data-id]').dataset.id);
+            const task = tasks.find(t => t.id === id);
+
+            if (task) {
+                task.done = e.target.checked;
+                save();
+                render();
+            }
+        });
+
+        $('list').addEventListener('click', e => {
+            const row = e.target.closest('[data-id]');
+            if (!row) return;
+
+            const id = Number(row.dataset.id);
+            const task = tasks.find(t => t.id === id);
+
+            if (!task) return;
+
+            if (e.target.closest('.delete')) {
+                tasks = tasks.filter(t => t.id !== id);
+                save();
+                render();
+            }
+
+            if (
+                e.target.closest('.edit') ||
+                e.target.classList.contains('task-title')
+            ) {
+                openModal(task);
+            }
+        });
+
+        // Clear completed
+        $('clear').onclick = () => {
+            tasks = tasks.filter(t => !t.done);
+            save();
+            render();
+        };
+
+        render();
+    </script>
+
 </body>
 
 </html>
